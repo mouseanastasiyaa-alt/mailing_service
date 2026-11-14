@@ -119,6 +119,8 @@ DATETIME_INPUT_FORMATS = ['%d.%m.%Y %H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M']
 
 STATIC_URL = "static/"
 
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
+
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
@@ -150,3 +152,11 @@ django.core.mail.utils.DNS_NAME.get_fqdn = get_fqdn_patch
 LOGIN_REDIRECT_URL = 'mailings:home'
 LOGOUT_REDIRECT_URL = 'mailings:home'
 LOGIN_URL = 'login'
+
+# --- Кеширование ---
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
+}

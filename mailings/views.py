@@ -16,6 +16,8 @@ from django.contrib.auth.tokens import default_token_generator
 
 from .models import Recipient, Message, Mailing, Attempt
 from .forms import RegistrationForm, MailingForm
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
 
 
 # --- Вспомогательные функции ---
@@ -25,6 +27,7 @@ def is_manager(user):
 
 
 # --- Главная страница ---
+@method_decorator(cache_page(60), name='dispatch')
 class HomeView(TemplateView):
     template_name = 'mailings/home.html'
 
@@ -321,6 +324,7 @@ def activate(request, uidb64, token):
 
 from django.db.models import Count, Q
 
+@method_decorator(cache_page(30), name='dispatch')
 class StatisticsView(LoginRequiredMixin, TemplateView):
     template_name = 'mailings/statistics.html'
 
