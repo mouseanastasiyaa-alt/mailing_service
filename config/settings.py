@@ -55,7 +55,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / 'templates'],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -145,3 +145,8 @@ def get_fqdn_patch():
 
 # Подменяем метод получения FQDN на заглушку
 django.core.mail.utils.DNS_NAME.get_fqdn = get_fqdn_patch
+
+# --- Аутентификация ---
+LOGIN_REDIRECT_URL = 'mailings:home'
+LOGOUT_REDIRECT_URL = 'mailings:home'
+LOGIN_URL = 'login'
