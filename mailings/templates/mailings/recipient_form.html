@@ -1,0 +1,10 @@
+{% extends 'mailings/base.html' %}
+{% block title %}Форма получателя{% endblock %}
+{% block content %}
+    <h1>Форма получателя</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Сохранить</button>
+    </form>
+{% endblock %}

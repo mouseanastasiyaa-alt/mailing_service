@@ -1,0 +1,7 @@
+{% extends 'mailings/base.html' %}
+{% block title %}Активация успешна{% endblock %}
+{% block content %}
+    <h1>Аккаунт активирован!</h1>
+    <p>Теперь вы можете пользоваться сервисом.</p>
+    <p><a href="{% url 'mailings:home' %}">На главную</a></p>
+{% endblock %}

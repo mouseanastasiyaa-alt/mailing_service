@@ -1,0 +1,16 @@
+{% extends 'mailings/base.html' %}
+{% block title %}Получатели{% endblock %}
+{% block content %}
+    <h1>Получатели</h1>
+    <a href="{% url 'mailings:recipient_create' %}">Добавить получателя</a>
+    <ul>
+        {% for r in recipients %}
+            <li>{{ r.email }} — {{ r.full_name }}
+                (<a href="{% url 'mailings:recipient_update' r.pk %}">ред.</a>
+                 <a href="{% url 'mailings:recipient_delete' r.pk %}">удал.</a>)
+            </li>
+        {% empty %}
+            <li>Пока нет получателей.</li>
+        {% endfor %}
+    </ul>
+{% endblock %}
