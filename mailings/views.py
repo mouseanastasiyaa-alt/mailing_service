@@ -4,13 +4,40 @@ from django.views.generic import (
 from django.urls import reverse_lazy
 from .models import Recipient, Message, Mailing
 
+from django.utils import timezone
+from django.db.models import Count
 
-# --- Главная страница (заглушка, заполним в Шаге 5) ---
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib import messages
+from django.core.mail import send_mail
+from django.conf import settings
+from .models import Attempt
+
 class HomeView(TemplateView):
     template_name = 'mailings/home.html'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        now = timezone.now()
 
-# --- Получатели ---
+        # Общее количество всех рассылок
+        context['total_mailings'] = Mailing.objects.count()
+
+        # Количество активных рассылок
+        # (статус 'Запущена' и текущее время между start_time и end_time)
+        active_mailings = Mailing.objects.filter(
+            status='Запущена',
+            start_time__lte=now,
+            end_time__gte=now
+        )
+        context['active_mailings'] = active_mailings.count()
+
+        # Количество уникальных получателей
+        context['total_recipients'] = Recipient.objects.count()
+
+        return context
+
+
 class RecipientListView(ListView):
     model = Recipient
     template_name = 'mailings/recipient_list.html'
@@ -111,3 +138,62 @@ class MailingDetailView(DetailView):
         obj = super().get_object(queryset)
         obj.update_status()  # ← пересчёт и сохранение статуса
         return obj
+
+
+def mailing_send(request, pk):
+    mailing = get_object_or_404(Mailing, pk=pk)
+
+    # 1. Проверка времени
+    now = timezone.now()
+    if not (mailing.start_time <= now <= mailing.end_time):
+        messages.error(request, 'Отправка невозможна: текущее время вне интервала рассылки.')
+        return redirect('mailings:mailing_detail', pk=pk)
+
+    # 2. Получение получателей
+    recipients = mailing.recipients.all()
+    if not recipients.exists():
+        messages.warning(request, 'У рассылки нет получателей.')
+        return redirect('mailings:mailing_detail', pk=pk)
+
+    # 3. Подготовка списка для batch-создания попыток
+    attempts_to_create = []
+    subject = mailing.message.subject
+    body = mailing.message.body
+
+    for recipient in recipients:
+        try:
+            # Отправка письма
+            send_mail(
+                subject=subject,
+                message=body,
+                from_email=settings.DEFAULT_FROM_EMAIL if hasattr(settings,
+                                                                  'DEFAULT_FROM_EMAIL') else 'noreply@example.com',
+                recipient_list=[recipient.email],
+                fail_silently=False,
+            )
+            # Успешная попытка
+            attempts_to_create.append(
+                Attempt(
+                    mailing=mailing,
+                    status='Успешно',
+                    server_response='Письмо отправлено успешно'
+                )
+            )
+        except Exception as e:
+            # Неуспешная попытка
+            attempts_to_create.append(
+                Attempt(
+                    mailing=mailing,
+                    status='Не успешно',
+                    server_response=str(e)
+                )
+            )
+
+    # 4. Batch-создание попыток
+    Attempt.objects.bulk_create(attempts_to_create)
+
+    # 5. Обновление статуса (на случай, если он ещё не "Запущена")
+    mailing.update_status()
+
+    messages.success(request, f'Рассылка завершена. Обработано получателей: {len(attempts_to_create)}.')
+    return redirect('mailings:mailing_detail', pk=pk)

@@ -105,12 +105,14 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "ru-ru"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Europe/Moscow"
 
 USE_I18N = True
 
 USE_TZ = True
 
+DATE_INPUT_FORMATS = ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y']
+DATETIME_INPUT_FORMATS = ['%d.%m.%Y %H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M']
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
@@ -120,9 +122,26 @@ STATIC_URL = "static/"
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# Принудительно задаем домен для Message-ID, чтобы обойти ошибку с именем ПК
+
 
 MAILERS = {
     "default": {
         "BACKEND": "django.core.mail.backends.console.EmailBackend",
     },
 }
+
+
+SERVER_EMAIL = 'noreply@example.com'
+DEFAULT_FROM_EMAIL = 'noreply@example.com'
+
+
+# --- ПАТЧ ДЛЯ ОБХОДА ОШИБКИ IDNA (имя компьютера) ---
+import socket
+import django.core.mail.utils
+
+def get_fqdn_patch():
+    return "example.com"
+
+# Подменяем метод получения FQDN на заглушку
+django.core.mail.utils.DNS_NAME.get_fqdn = get_fqdn_patch
