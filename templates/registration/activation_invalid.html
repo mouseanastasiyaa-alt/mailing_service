@@ -1,0 +1,7 @@
+{% extends 'mailings/base.html' %}
+{% block title %}Ошибка активации{% endblock %}
+{% block content %}
+    <h1>Ссылка недействительна</h1>
+    <p>Возможно, ссылка устарела или уже была использована.</p>
+    <p><a href="{% url 'register' %}">Попробовать снова</a></p>
+{% endblock %}

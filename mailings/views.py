@@ -1,3 +1,13 @@
+from django.contrib.auth import login
+from django.contrib.auth.models import User
+from django.core.mail import send_mail
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.contrib.auth.tokens import default_token_generator
+from django.template.loader import render_to_string
+from django.shortcuts import render
+from .forms import RegistrationForm
+
 from django.views.generic import (
     ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView
 )
@@ -197,3 +207,53 @@ def mailing_send(request, pk):
 
     messages.success(request, f'Рассылка завершена. Обработано получателей: {len(attempts_to_create)}.')
     return redirect('mailings:mailing_detail', pk=pk)
+
+
+def register(request):
+    if request.method == 'POST':
+        form = RegistrationForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.is_active = False  # Пользователь неактивен до подтверждения
+            user.set_password(form.cleaned_data['password'])
+            user.save()
+
+            # Генерация токена и ссылки
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            activation_link = request.build_absolute_uri(
+                f'/accounts/activate/{uid}/{token}/'
+            )
+
+            # Отправка письма
+            subject = 'Подтверждение регистрации'
+            message = f'Здравствуйте, {user.username}!\n\nДля активации аккаунта перейдите по ссылке:\n{activation_link}'
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email='noreply@example.com',
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+
+            return render(request, 'registration/registration_success.html', {'email': user.email})
+    else:
+        form = RegistrationForm()
+
+    return render(request, 'registration/register.html', {'form': form})
+
+
+def activate(request, uidb64, token):
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+
+    if user is not None and default_token_generator.check_token(user, token):
+        user.is_active = True
+        user.save()
+        login(request, user)
+        return render(request, 'registration/activation_success.html')
+    else:
+        return render(request, 'registration/activation_invalid.html')

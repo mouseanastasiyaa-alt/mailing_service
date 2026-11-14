@@ -4,8 +4,10 @@ from . import views
 app_name = 'mailings'
 
 urlpatterns = [
-    # Главная страница (пока заглушка, заполним в Шаге 5)
+    # Главная страница
     path('', views.HomeView.as_view(), name='home'),
+    path('accounts/register/', views.register, name='register'),
+    path('accounts/activate/<uidb64>/<token>/', views.activate, name='activate'),
 
     # Получатели
     path('recipients/', views.RecipientListView.as_view(), name='recipient_list'),
