@@ -8,6 +8,7 @@ urlpatterns = [
     path('', views.HomeView.as_view(), name='home'),
     path('accounts/register/', views.register, name='register'),
     path('accounts/activate/<uidb64>/<token>/', views.activate, name='activate'),
+    path('statistics/', views.StatisticsView.as_view(), name='statistics'),
 
     # Получатели
     path('recipients/', views.RecipientListView.as_view(), name='recipient_list'),

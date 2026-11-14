@@ -1,187 +1,252 @@
-from django.contrib.auth import login
-from django.contrib.auth.models import User
-from django.core.mail import send_mail
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
-from django.contrib.auth.tokens import default_token_generator
-from django.template.loader import render_to_string
-from django.shortcuts import render
-from .forms import RegistrationForm
-
 from django.views.generic import (
     ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView
 )
 from django.urls import reverse_lazy
-from .models import Recipient, Message, Mailing
-
 from django.utils import timezone
-from django.db.models import Count
-
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import Attempt
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth import login
+from django.contrib.auth.models import User
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.contrib.auth.tokens import default_token_generator
 
+from .models import Recipient, Message, Mailing, Attempt
+from .forms import RegistrationForm, MailingForm
+
+
+# --- Вспомогательные функции ---
+def is_manager(user):
+    """Проверяет, состоит ли пользователь в группе 'Менеджеры'."""
+    return user.is_authenticated and user.groups.filter(name='Менеджеры').exists()
+
+
+# --- Главная страница ---
 class HomeView(TemplateView):
     template_name = 'mailings/home.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         now = timezone.now()
+        user = self.request.user
 
-        # Общее количество всех рассылок
-        context['total_mailings'] = Mailing.objects.count()
+        if not user.is_authenticated:
+            context['total_mailings'] = 0
+            context['active_mailings'] = 0
+            context['total_recipients'] = 0
+            return context
 
-        # Количество активных рассылок
-        # (статус 'Запущена' и текущее время между start_time и end_time)
-        active_mailings = Mailing.objects.filter(
-            status='Запущена',
-            start_time__lte=now,
-            end_time__gte=now
-        )
-        context['active_mailings'] = active_mailings.count()
-
-        # Количество уникальных получателей
-        context['total_recipients'] = Recipient.objects.count()
+        if is_manager(user):
+            context['total_mailings'] = Mailing.objects.count()
+            context['active_mailings'] = Mailing.objects.filter(
+                status='Запущена',
+                start_time__lte=now,
+                end_time__gte=now
+            ).count()
+            context['total_recipients'] = Recipient.objects.count()
+        else:
+            context['total_mailings'] = Mailing.objects.filter(owner=user).count()
+            context['active_mailings'] = Mailing.objects.filter(
+                owner=user,
+                status='Запущена',
+                start_time__lte=now,
+                end_time__gte=now
+            ).count()
+            context['total_recipients'] = Recipient.objects.filter(owner=user).count()
 
         return context
 
 
-class RecipientListView(ListView):
+# --- Получатели ---
+class RecipientListView(LoginRequiredMixin, ListView):
     model = Recipient
     template_name = 'mailings/recipient_list.html'
     context_object_name = 'recipients'
 
+    def get_queryset(self):
+        if is_manager(self.request.user):
+            return Recipient.objects.all()
+        return Recipient.objects.filter(owner=self.request.user)
 
-class RecipientCreateView(CreateView):
+
+class RecipientCreateView(LoginRequiredMixin, CreateView):
     model = Recipient
     fields = ['email', 'full_name', 'comment']
     template_name = 'mailings/recipient_form.html'
     success_url = reverse_lazy('mailings:recipient_list')
 
+    def form_valid(self, form):
+        form.instance.owner = self.request.user
+        return super().form_valid(form)
 
-class RecipientUpdateView(UpdateView):
+
+class RecipientUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = Recipient
     fields = ['email', 'full_name', 'comment']
     template_name = 'mailings/recipient_form.html'
     success_url = reverse_lazy('mailings:recipient_list')
 
+    def test_func(self):
+        obj = self.get_object()
+        return is_manager(self.request.user) or obj.owner == self.request.user
 
-class RecipientDeleteView(DeleteView):
+
+class RecipientDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
     model = Recipient
     template_name = 'mailings/recipient_confirm_delete.html'
     success_url = reverse_lazy('mailings:recipient_list')
 
+    def test_func(self):
+        obj = self.get_object()
+        return is_manager(self.request.user) or obj.owner == self.request.user
+
 
 # --- Сообщения ---
-class MessageListView(ListView):
+class MessageListView(LoginRequiredMixin, ListView):
     model = Message
     template_name = 'mailings/message_list.html'
     context_object_name = 'messages'
 
+    def get_queryset(self):
+        if is_manager(self.request.user):
+            return Message.objects.all()
+        return Message.objects.filter(owner=self.request.user)
 
-class MessageCreateView(CreateView):
+
+class MessageCreateView(LoginRequiredMixin, CreateView):
     model = Message
     fields = ['subject', 'body']
     template_name = 'mailings/message_form.html'
     success_url = reverse_lazy('mailings:message_list')
 
+    def form_valid(self, form):
+        form.instance.owner = self.request.user
+        return super().form_valid(form)
 
-class MessageUpdateView(UpdateView):
+
+class MessageUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = Message
     fields = ['subject', 'body']
     template_name = 'mailings/message_form.html'
     success_url = reverse_lazy('mailings:message_list')
 
+    def test_func(self):
+        obj = self.get_object()
+        return is_manager(self.request.user) or obj.owner == self.request.user
 
-class MessageDeleteView(DeleteView):
+
+class MessageDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
     model = Message
     template_name = 'mailings/message_confirm_delete.html'
     success_url = reverse_lazy('mailings:message_list')
 
+    def test_func(self):
+        obj = self.get_object()
+        return is_manager(self.request.user) or obj.owner == self.request.user
+
 
 # --- Рассылки ---
-class MailingListView(ListView):
+class MailingListView(LoginRequiredMixin, ListView):
     model = Mailing
     template_name = 'mailings/mailing_list.html'
     context_object_name = 'mailings'
 
     def get_queryset(self):
-        # Пока показываем все рассылки (права доступа добавим в Части 2)
-        return Mailing.objects.all()
+        if is_manager(self.request.user):
+            return Mailing.objects.all()
+        return Mailing.objects.filter(owner=self.request.user)
 
 
-class MailingCreateView(CreateView):
+class MailingCreateView(LoginRequiredMixin, CreateView):
     model = Mailing
-    fields = ['start_time', 'end_time', 'message', 'recipients']
+    form_class = MailingForm
     template_name = 'mailings/mailing_form.html'
     success_url = reverse_lazy('mailings:mailing_list')
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
     def form_valid(self, form):
-        # При создании сразу вычисляем статус
+        form.instance.owner = self.request.user
         form.instance.status = 'Создана'
         response = super().form_valid(form)
         self.object.update_status()
         return response
 
 
-class MailingUpdateView(UpdateView):
+class MailingUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = Mailing
-    fields = ['start_time', 'end_time', 'message', 'recipients']
+    form_class = MailingForm
     template_name = 'mailings/mailing_form.html'
     success_url = reverse_lazy('mailings:mailing_list')
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
 
-class MailingDeleteView(DeleteView):
+    def test_func(self):
+        obj = self.get_object()
+        return is_manager(self.request.user) or obj.owner == self.request.user
+
+
+class MailingDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
     model = Mailing
     template_name = 'mailings/mailing_confirm_delete.html'
     success_url = reverse_lazy('mailings:mailing_list')
 
+    def test_func(self):
+        obj = self.get_object()
+        return is_manager(self.request.user) or obj.owner == self.request.user
 
-class MailingDetailView(DetailView):
+
+class MailingDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
     model = Mailing
     template_name = 'mailings/mailing_detail.html'
     context_object_name = 'mailing'
 
     def get_object(self, queryset=None):
         obj = super().get_object(queryset)
-        obj.update_status()  # ← пересчёт и сохранение статуса
+        obj.update_status()
         return obj
 
+    def test_func(self):
+        obj = self.get_object()
+        return is_manager(self.request.user) or obj.owner == self.request.user
 
+
+# --- Отправка рассылки ---
 def mailing_send(request, pk):
     mailing = get_object_or_404(Mailing, pk=pk)
 
-    # 1. Проверка времени
     now = timezone.now()
     if not (mailing.start_time <= now <= mailing.end_time):
         messages.error(request, 'Отправка невозможна: текущее время вне интервала рассылки.')
         return redirect('mailings:mailing_detail', pk=pk)
 
-    # 2. Получение получателей
     recipients = mailing.recipients.all()
     if not recipients.exists():
         messages.warning(request, 'У рассылки нет получателей.')
         return redirect('mailings:mailing_detail', pk=pk)
 
-    # 3. Подготовка списка для batch-создания попыток
     attempts_to_create = []
     subject = mailing.message.subject
     body = mailing.message.body
 
     for recipient in recipients:
         try:
-            # Отправка письма
             send_mail(
                 subject=subject,
                 message=body,
-                from_email=settings.DEFAULT_FROM_EMAIL if hasattr(settings,
-                                                                  'DEFAULT_FROM_EMAIL') else 'noreply@example.com',
+                from_email=settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else 'noreply@example.com',
                 recipient_list=[recipient.email],
                 fail_silently=False,
             )
-            # Успешная попытка
             attempts_to_create.append(
                 Attempt(
                     mailing=mailing,
@@ -190,7 +255,6 @@ def mailing_send(request, pk):
                 )
             )
         except Exception as e:
-            # Неуспешная попытка
             attempts_to_create.append(
                 Attempt(
                     mailing=mailing,
@@ -199,33 +263,29 @@ def mailing_send(request, pk):
                 )
             )
 
-    # 4. Batch-создание попыток
     Attempt.objects.bulk_create(attempts_to_create)
-
-    # 5. Обновление статуса (на случай, если он ещё не "Запущена")
     mailing.update_status()
 
     messages.success(request, f'Рассылка завершена. Обработано получателей: {len(attempts_to_create)}.')
     return redirect('mailings:mailing_detail', pk=pk)
 
 
+# --- Регистрация и активация ---
 def register(request):
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():
             user = form.save(commit=False)
-            user.is_active = False  # Пользователь неактивен до подтверждения
+            user.is_active = False
             user.set_password(form.cleaned_data['password'])
             user.save()
 
-            # Генерация токена и ссылки
             token = default_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             activation_link = request.build_absolute_uri(
                 f'/accounts/activate/{uid}/{token}/'
             )
 
-            # Отправка письма
             subject = 'Подтверждение регистрации'
             message = f'Здравствуйте, {user.username}!\n\nДля активации аккаунта перейдите по ссылке:\n{activation_link}'
             send_mail(
@@ -257,3 +317,42 @@ def activate(request, uidb64, token):
         return render(request, 'registration/activation_success.html')
     else:
         return render(request, 'registration/activation_invalid.html')
+
+
+from django.db.models import Count, Q
+
+class StatisticsView(LoginRequiredMixin, TemplateView):
+    template_name = 'mailings/statistics.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        # Фильтруем рассылки: менеджер видит все, пользователь — только свои
+        if is_manager(user):
+            mailings = Mailing.objects.all()
+            attempts = Attempt.objects.all()
+        else:
+            mailings = Mailing.objects.filter(owner=user)
+            attempts = Attempt.objects.filter(mailing__owner=user)
+
+        # 1. Общее количество отправленных сообщений (успешных попыток)
+        context['total_sent'] = attempts.filter(status='Успешно').count()
+
+        # 2. Статистика по попыткам
+        context['total_success'] = attempts.filter(status='Успешно').count()
+        context['total_failed'] = attempts.filter(status='Не успешно').count()
+
+        # 3. Детализация по каждой рассылке (сколько успешных и неуспешных попыток)
+        mailing_stats = []
+        for mailing in mailings:
+            m_attempts = attempts.filter(mailing=mailing)
+            mailing_stats.append({
+                'mailing': mailing,
+                'success': m_attempts.filter(status='Успешно').count(),
+                'failed': m_attempts.filter(status='Не успешно').count(),
+                'total': m_attempts.count(),
+            })
+        context['mailing_stats'] = mailing_stats
+
+        return context

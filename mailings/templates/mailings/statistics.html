@@ -1,0 +1,38 @@
+{% extends 'mailings/base.html' %}
+{% block title %}Статистика{% endblock %}
+{% block content %}
+    <h1>Статистика</h1>
+
+    <h2>Общие показатели</h2>
+    <ul>
+        <li>Всего отправленных сообщений (успешно): <strong>{{ total_sent }}</strong></li>
+        <li>Успешных попыток: <strong>{{ total_success }}</strong></li>
+        <li>Неуспешных попыток: <strong>{{ total_failed }}</strong></li>
+    </ul>
+
+    <h2>Детализация по рассылкам</h2>
+    {% if mailing_stats %}
+        <table border="1" cellpadding="5" cellspacing="0">
+            <thead>
+                <tr>
+                    <th>Рассылка</th>
+                    <th>Успешно</th>
+                    <th>Не успешно</th>
+                    <th>Всего попыток</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in mailing_stats %}
+                    <tr>
+                        <td>{{ stat.mailing }}</td>
+                        <td>{{ stat.success }}</td>
+                        <td>{{ stat.failed }}</td>
+                        <td>{{ stat.total }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>Пока нет данных о рассылках.</p>
+    {% endif %}
+{% endblock %}

@@ -1,10 +1,12 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.contrib.auth.models import User
 
 
 class Recipient(models.Model):
     """Модель Получатель рассылки"""
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Владелец")
     email = models.EmailField(unique=True, verbose_name="Email")
     full_name = models.CharField(max_length=255, verbose_name="Ф. И. О.")
     comment = models.TextField(blank=True, null=True, verbose_name="Комментарий")
@@ -19,6 +21,7 @@ class Recipient(models.Model):
 
 class Message(models.Model):
     """Модель Сообщение"""
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Владелец")
     subject = models.CharField(max_length=255, verbose_name="Тема письма")
     body = models.TextField(verbose_name="Тело письма")
 
@@ -32,6 +35,7 @@ class Message(models.Model):
 
 class Mailing(models.Model):
     """Модель Рассылка"""
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Владелец")
     STATUS_CHOICES = [
         ('Создана', 'Создана'),
         ('Запущена', 'Запущена'),
