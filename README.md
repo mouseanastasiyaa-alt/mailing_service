@@ -39,7 +39,7 @@
 
 1. Клонируй репозиторий:
    ```bash
-   git clone <URL_репозитория>
+   git clone <https://github.com/mouseanastasiyaa-alt/mailing_service.git>
    cd mailing_service
    
 ## Создай виртуальное окружение и активируй его:
